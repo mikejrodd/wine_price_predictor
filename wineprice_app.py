@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import joblib
 import json
 import os
+import plotly.graph_objects as go
 from mapping_dict import map_varieties
 
 # Initialize session state for storing plot data and a counter
@@ -46,23 +47,51 @@ def model_prediction(country, region, score, grape_variety):
     return price_prediction[0], wine_type
 
 # Function to create bar plot
-def create_bar_plot(data):
-    plt.figure(figsize=(14, 8))
-    for idx, (label, prediction, color, rmse) in enumerate(data):
-        prediction = max(0, prediction)
-        plt.bar(idx, prediction, color=color, capsize=5)
-        label_y = max(3, prediction + 2)
-        plt.text(idx, label_y, f"${prediction:.1f}", ha='center', fontsize=18, fontweight='bold')
+# def create_bar_plot(data):
+#     plt.figure(figsize=(14, 8))
+#     for idx, (label, prediction, color, rmse) in enumerate(data):
+#         prediction = max(0, prediction)
+#         plt.bar(idx, prediction, color=color, capsize=5)
+#         label_y = max(3, prediction + 2)
+#         plt.text(idx, label_y, f"${prediction:.1f}", ha='center', fontsize=18, fontweight='bold')
     
-    plt.xticks(range(len(data)), [item[0] for item in data], rotation=75, fontsize=12)
+#     plt.xticks(range(len(data)), [item[0] for item in data], rotation=75, fontsize=12)
 
-    # Set the default y-axis range to 0 to 100
-    plt.ylim(0, 100)
+#     # Set the default y-axis range to 0 to 100
+#     plt.ylim(0, 100)
 
-    plt.ylabel('USD ($)', fontsize=18)
-    plt.title(f"Predicted Prices for World Wines", fontsize=20)
-    plt.tick_params(axis='both', which='major', labelsize=16)
-    st.pyplot(plt)
+#     plt.ylabel('USD ($)', fontsize=18)
+#     plt.title(f"Predicted Prices for World Wines", fontsize=20)
+#     plt.tick_params(axis='both', which='major', labelsize=16)
+#     st.pyplot(plt)
+
+# Function to create bar plot using Plotly
+def create_bar_plot(data):
+    # Extract data for plotting
+    labels = [item[0] for item in data]
+    predictions = [max(0, item[1]) for item in data]
+    colors = [item[2] for item in data]
+
+    # Create a Plotly bar chart
+    fig = go.Figure(data=[go.Bar(
+        x=labels,
+        y=predictions,
+        text=[f"${p:.1f}" for p in predictions],  # Text to display on each bar
+        textposition='outside',  # Position of the text
+        marker_color=colors
+    )])
+
+    # Update layout
+    fig.update_layout(
+        title="Predicted Prices for World Wines",
+        yaxis=dict(title='USD ($)'),
+        #xaxis=dict(title='Wines'),
+        yaxis_range=[0,80],
+        showlegend=False
+    )
+
+    # Display the plot
+    st.plotly_chart(fig, use_container_width=True)
 
 # Streamlit interface
 st.markdown(
