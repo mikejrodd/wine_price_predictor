@@ -10,6 +10,7 @@ from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import joblib
 import json
+import os
 from mapping_dict import map_varieties
 
 # Initialize session state for storing plot data and a counter
@@ -19,11 +20,19 @@ if 'plot_data' not in st.session_state:
     st.session_state['bar_counter'] = 0
     st.session_state['total_inputs'] = 0
 
-# Load model, RMSE, and country-region mapping
-model_pipeline = joblib.load('model.pkl')
-with open('model_rmse.txt') as f:
+# Construct the full path to the file
+file_path_rmse = os.path.join(os.path.dirname(__file__), 'model_rmse.txt')
+file_path_country_region = os.path.join(os.path.dirname(__file__), 'country_region_mapping.json')
+
+# Open the file for RMSE
+with open(file_path_rmse) as f:
     rmse = float(f.read())
-with open('country_region_mapping.json') as f:
+
+# Load model and country-region mapping
+model_pipeline = joblib.load('model.pkl')
+
+# Open the file for country-region mapping
+with open(file_path_country_region) as f:
     country_region_dict = json.load(f)
 
 # Get unique grape varieties from the map_varieties function
