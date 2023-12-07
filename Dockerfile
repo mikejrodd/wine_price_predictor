@@ -19,6 +19,7 @@ COPY wineprice_app.py /app/
 COPY mapping_dict.py /app/
 COPY model.pkl /app/
 COPY country_region_mapping.json /app/
+COPY model_rmse.txt /app/
 
 # Expose the port that Streamlit will run on (default is 8501)
 EXPOSE 8501
