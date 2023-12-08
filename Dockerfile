@@ -20,6 +20,10 @@ COPY mapping_dict.py /app/
 COPY model.pkl /app/
 COPY country_region_mapping.json /app/
 COPY model_rmse.txt /app/
+COPY price_per_point.txt /app/
+COPY score_trend_params.txt /app/
+COPY outlier_regions.txt /app/
+
 
 # Expose the port that Streamlit will run on (default is 8501)
 EXPOSE 8501
