@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
+from scipy.stats import norm
 from sklearn.linear_model import Ridge
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
@@ -24,46 +25,80 @@ if 'plot_data' not in st.session_state:
 # Construct the full path to the file
 file_path_rmse = os.path.join(os.path.dirname(__file__), 'model_rmse.txt')
 file_path_country_region = os.path.join(os.path.dirname(__file__), 'country_region_mapping.json')
+file_path_slope_intercept = os.path.join(os.path.dirname(__file__), 'score_trend_params.txt')
+file_path_outlier_regions = os.path.join(os.path.dirname(__file__), 'outlier_regions.txt')
+file_path_price_per_point = os.path.join(os.path.dirname(__file__), 'price_per_point.txt')
 
+# Load average price per point for score trend adjustment
+with open(file_path_price_per_point, 'r') as f:
+    average_price_per_point = float(f.read())
+    
 # Open the file for RMSE
 with open(file_path_rmse) as f:
     rmse = float(f.read())
 
-# Load model and country-region mapping
-model_pipeline = joblib.load('model.pkl')
+# Open the file for outlier regions
+with open(file_path_outlier_regions) as f:
+    outlier_regions = f.read()
+
+# Load slope and intercept for score trend adjustment
+with open(file_path_slope_intercept, 'r') as f:
+    lines = f.readlines()
+    slope = float(lines[0].strip())
+    intercept = float(lines[1].strip())
 
 # Open the file for country-region mapping
 with open(file_path_country_region) as f:
     country_region_dict = json.load(f)
 
+# Load model and country-region mapping
+model_pipeline = joblib.load('model.pkl')
+
 # Get unique grape varieties from the map_varieties function
 unique_varieties = list(map_varieties())
 
-# Function to make price prediction
-def model_prediction(country, region, score, grape_variety):
-    wine_type = map_varieties(grape_variety)
-    input_data = pd.DataFrame([[score, country, region, wine_type]], columns=['points', 'country', 'region_1', 'wine_type'])
-    price_prediction = model_pipeline.predict(input_data)
-    return price_prediction[0], wine_type
+def model_prediction(country, region, score, grape_variety, wine_type, outlier_regions, average_price_per_point):
+    # Predict the baseline price without considering the score
+    input_data = pd.DataFrame([[country, region, wine_type, grape_variety]], columns=['country', 'region_1', 'wine_type', 'variety'])
+    baseline_prediction = model_pipeline.predict(input_data)[0]
 
-# Function to create bar plot
-# def create_bar_plot(data):
-#     plt.figure(figsize=(14, 8))
-#     for idx, (label, prediction, color, rmse) in enumerate(data):
-#         prediction = max(0, prediction)
-#         plt.bar(idx, prediction, color=color, capsize=5)
-#         label_y = max(3, prediction + 2)
-#         plt.text(idx, label_y, f"${prediction:.1f}", ha='center', fontsize=18, fontweight='bold')
-    
-#     plt.xticks(range(len(data)), [item[0] for item in data], rotation=75, fontsize=12)
+    # Standard score-based adjustment
+    reference_score = 91
+    score_adjustment = (score - reference_score) * average_price_per_point
+    adjusted_prediction = baseline_prediction + score_adjustment
 
-#     # Set the default y-axis range to 0 to 100
-#     plt.ylim(0, 100)
+    # Check for outlier region and apply a premium if applicable
+    outlier_premium_factor = 1.5  # Define the premium factor for outlier regions
+    if region in outlier_regions:
+        adjusted_prediction *= outlier_premium_factor
 
-#     plt.ylabel('USD ($)', fontsize=18)
-#     plt.title(f"Predicted Prices for World Wines", fontsize=20)
-#     plt.tick_params(axis='both', which='major', labelsize=16)
-#     st.pyplot(plt)
+    # Additional adjustments for specific score ranges
+    if score < 80:
+        # Apply a penalty for wines scored under 75
+        penalty_factor = 0.4  # Define the penalty factor (less than 1)
+        adjusted_prediction *= penalty_factor
+    elif score < 84 and score > 79:
+        # Apply a penalty for wines scored under 75
+        penalty_factor = 0.6  # Define the penalty factor (less than 1)
+        adjusted_prediction *= penalty_factor
+    elif score < 87 and score > 83:
+        # Apply a penalty for wines scored under 75
+        penalty_factor = 0.8  # Define the penalty factor (less than 1)
+        adjusted_prediction *= penalty_factor
+    elif score > 99:
+        # Apply a reward for wines scored over 99
+        reward_factor = 1.2  # Define the reward factor (greater than 1)
+        adjusted_prediction *= reward_factor
+
+    # Penalty if country and region are the same
+    if country == region:
+        same_place_penalty_factor = 0.7  # Define the penalty factor for same country and region
+        adjusted_prediction *= same_place_penalty_factor
+
+    # Ensure the prediction is not negative
+    adjusted_prediction = max(adjusted_prediction, 0)
+
+    return adjusted_prediction
 
 # Function to create bar plot using Plotly
 def create_bar_plot(data):
@@ -72,9 +107,13 @@ def create_bar_plot(data):
     predictions = [max(0, item[1]) for item in data]
     colors = [item[2] for item in data]
 
+    # Insert a line break after the variety in each label
+    split_labels = [' '.join(label.split(' ', 2)[:2]) + '<br>' + ' '.join(label.split(' ', 2)[2:]) for label in labels]
+
+
     # Create a Plotly bar chart
     fig = go.Figure(data=[go.Bar(
-        x=labels,
+        x=split_labels,  # Use split labels for the x-axis
         y=predictions,
         text=[f"${p:.1f}" for p in predictions],  # Text to display on each bar
         textposition='outside',  # Position of the text
@@ -84,9 +123,9 @@ def create_bar_plot(data):
     # Update layout
     fig.update_layout(
         title="Predicted Prices for World Wines",
+        title_x=0.37, 
         yaxis=dict(title='USD ($)'),
-        #xaxis=dict(title='Wines'),
-        yaxis_range=[0,80],
+        yaxis_range=[0,120],
         showlegend=False
     )
 
@@ -102,34 +141,42 @@ st.markdown(
 )
 
 # Country selection
-selected_country = st.selectbox("Country:", sorted(country_region_dict.keys()), index=sorted(country_region_dict.keys()).index(st.session_state.get('selected_country', list(country_region_dict.keys())[0])))
+default_country_index = sorted(country_region_dict.keys()).index('US') if 'US' in country_region_dict else 0
+selected_country = st.selectbox("Country:", sorted(country_region_dict.keys()), index=default_country_index)
 st.session_state['selected_country'] = selected_country
 
 # Region selection
-selected_region = st.selectbox("Region:", country_region_dict[selected_country])
+default_region_index = country_region_dict[selected_country].index('Lake Michigan Shore') if 'Lake Michigan Shore' in country_region_dict[selected_country] else 0
+selected_region = st.selectbox("Region:", country_region_dict[selected_country], index=default_region_index)
 
 # Grape variety selection
-grape_variety = st.selectbox("Grape Variety:", sorted(unique_varieties))
-score = st.slider("Score:", min_value=70, max_value=100, value=90)
+default_variety_index = sorted(unique_varieties).index('Riesling') if 'Riesling' in unique_varieties else 0
+grape_variety = st.selectbox("Grape Variety:", sorted(unique_varieties), index=default_variety_index)
+score = st.slider("Score:", min_value=75, max_value=100, value=90)
 
 # Prediction and plotting
 col1, col2, col3, col4, col5 = st.columns([1, 1, 1.7, 1, 1])
 
 with col1:
     if st.button('Predict Price'):
-        predicted_price, wine_type = model_prediction(selected_country, selected_region, score, grape_variety)
+        wine_type = map_varieties(grape_variety)  # Map grape variety to wine type
+        predicted_price = model_prediction(selected_country, selected_region, score, grape_variety, wine_type, outlier_regions, average_price_per_point)
         predicted_price = float(predicted_price)
         wine_color = {'red': 'plum', 'white': 'palegoldenrod', 'rose': 'mistyrose'}.get(wine_type, 'black')
-        label = f"{score}-pt {grape_variety.title()} from {selected_region}, {selected_country}"
-        
-        # Check if the maximum number of bars (5) has been reached, and add a new one
-        if st.session_state['total_inputs'] < 5:
-            st.session_state['plot_data'][st.session_state['bar_counter']] = (label, predicted_price, wine_color, rmse)
-            st.session_state['bar_counter'] += 1
+        label = f"{score}-pt {grape_variety.title()} {selected_region}, {selected_country}"
+
+        # Check if this wine is already in the plot_data
+        existing_labels = [item[0] for item in st.session_state['plot_data']]
+        if label in existing_labels:
+            st.warning("This wine is already priced below.")
         else:
-            st.session_state['plot_data'].append((label, predicted_price, wine_color, rmse))
-        
-        st.session_state['total_inputs'] += 1
+            if st.session_state['total_inputs'] < 5:
+                st.session_state['plot_data'][st.session_state['bar_counter']] = (label, predicted_price, wine_color, rmse)
+                st.session_state['bar_counter'] += 1
+            else:
+                st.session_state['plot_data'].append((label, predicted_price, wine_color, rmse))
+            
+            st.session_state['total_inputs'] += 1
 
 with col5:
     if st.button('Reset Graph', key='reset'):
