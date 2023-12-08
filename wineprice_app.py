@@ -107,15 +107,17 @@ def create_bar_plot(data):
     predictions = [max(0, item[1]) for item in data]
     colors = [item[2] for item in data]
 
-    # Insert a line break after the variety in each label
-    split_labels = [' '.join(label.split(' ', 2)[:2]) + '<br>' + ' '.join(label.split(' ', 2)[2:]) for label in labels]
+    # Insert a line break after the second parenthesis in each label
+    split_labels = [label.replace(") ", ")<br>", 1) for label in labels]
 
+    # Set text for each bar based on whether the label is empty or not
+    text = [f"${p:.1f}" if label else '' for label, p in zip(split_labels, predictions)]
 
     # Create a Plotly bar chart
     fig = go.Figure(data=[go.Bar(
-        x=split_labels,  # Use split labels for the x-axis
+        x=split_labels,  # Use the split labels with line break for x-axis
         y=predictions,
-        text=[f"${p:.1f}" for p in predictions],  # Text to display on each bar
+        text=text,
         textposition='outside',  # Position of the text
         marker_color=colors
     )])
@@ -163,7 +165,7 @@ with col1:
         predicted_price = model_prediction(selected_country, selected_region, score, grape_variety, wine_type, outlier_regions, average_price_per_point)
         predicted_price = float(predicted_price)
         wine_color = {'red': 'plum', 'white': 'palegoldenrod', 'rose': 'mistyrose'}.get(wine_type, 'black')
-        label = f"{score}-pt {grape_variety.title()} {selected_region}, {selected_country}"
+        label = f"{grape_variety.title()} ({score}-pts) {selected_region}, {selected_country}"
 
         # Check if this wine is already in the plot_data
         existing_labels = [item[0] for item in st.session_state['plot_data']]
