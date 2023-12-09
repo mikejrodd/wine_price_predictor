@@ -17,8 +17,9 @@ RUN pip install -r requirements.txt
 # Copy the remaining app files into the container
 COPY wineprice_app.py /app/
 COPY mapping_dict.py /app/
+COPY predict.py /app/
 COPY model.pkl /app/
-COPY country_region_mapping.json /app/
+COPY country__province_region_mapping.json /app/
 COPY model_rmse.txt /app/
 COPY price_per_point.txt /app/
 COPY score_trend_params.txt /app/
